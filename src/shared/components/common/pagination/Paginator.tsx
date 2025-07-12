@@ -1,6 +1,6 @@
-import Image from "next/image";
+import Image from 'next/image';
 
-import useViewport from "@/shared/hooks/useViewport";
+import useViewport from '@/shared/hooks/useViewport';
 
 interface PaginatorProps {
   currentPage: number;
@@ -34,38 +34,38 @@ const Paginator = ({ currentPage, totalPages, onChange }: PaginatorProps) => {
       if (showLeft) {
         // 앞쪽 페이지 구간(현재 페이지가 왼쪽에 가까운 경우)
         pages.push(...createRange(1, visiblePages));
-        pages.push("...", totalPages);
+        pages.push('...', totalPages);
       } else if (showRight) {
         // 뒤쪽 페이지 구간(현재 페이지가 오른쪽에 가까운 경우)
-        pages.push(1, "...");
+        pages.push(1, '...');
         pages.push(...createRange(totalPages - visiblePages + 1, totalPages));
       } else {
         // 중간 페이지 구간(현재 페이지가 중간에 있는 경우)
         const sidePages = Math.floor((visiblePages - 2) / 2); // 양쪽에 표시할 페이지 수
-        pages.push(1, "...");
+        pages.push(1, '...');
         pages.push(
-          ...createRange(currentPage - sidePages, currentPage + sidePages),
+          ...createRange(currentPage - sidePages, currentPage + sidePages)
         );
-        pages.push("...", totalPages);
+        pages.push('...', totalPages);
       }
     }
 
     return pages.map((page, index) => {
       const pageClassName =
         currentPage === page
-          ? "text-black-400 font-semibold"
-          : "text-gray-200 font-medium";
-      return page === "..." ? (
+          ? 'text-black-400 font-semibold'
+          : 'text-gray-200 font-medium';
+      return page === '...' ? (
         <div
           key={`ellipsis-${index}`} // ellipsis의 경우 변경 가능성이 낮다고 생각하여 index 사용
-          className="flex justify-center items-center w-34 h-34 lg:w-48 lg:h-48 text-md lg:text-2lg bg-background-200 rounded-md lg:rounded-lg text-gray-200 pb-1/3 font-medium"
+          className="pb-1/3 flex h-34 w-34 items-center justify-center rounded-md bg-background-200 text-md font-medium text-gray-200 lg:h-48 lg:w-48 lg:rounded-lg lg:text-2lg"
         >
-          <span className="h-fit leading-none pb-9">...</span>
+          <span className="h-fit pb-9 leading-none">...</span>
         </div>
       ) : (
         <button
           key={`page-${page}`}
-          className={`flex justify-center items-center w-34 h-34 lg:w-48 lg:h-48 cursor-pointer text-center text-md lg:text-2lg bg-background-200 rounded-md lg:rounded-lg ${pageClassName}`}
+          className={`flex h-34 w-34 cursor-pointer items-center justify-center rounded-md bg-background-200 text-center text-md lg:h-48 lg:w-48 lg:rounded-lg lg:text-2lg ${pageClassName}`}
           disabled={currentPage === page}
           onClick={() => onChange(Number(page))}
         >
@@ -78,38 +78,38 @@ const Paginator = ({ currentPage, totalPages, onChange }: PaginatorProps) => {
   return (
     <div className="flex items-center gap-4">
       <button
-        className="w-34 h-34 lg:w-48 lg:h-48 bg-background-200 p-9 lg:p-12 rounded-md lg:rounded-lg"
+        className="h-34 w-34 cursor-pointer rounded-md bg-background-200 p-9 disabled:cursor-default lg:h-48 lg:w-48 lg:rounded-lg lg:p-12"
         disabled={currentPage === 1}
         onClick={() => onChange(currentPage - 1)}
       >
-        <div className="relative w-full h-full">
+        <div className="relative h-full w-full">
           <Image
             fill
             alt="previous page"
             sizes="(min-width: 1024px) 24px, 16px"
             src={
               currentPage === 1
-                ? "/icons/chevron-left.svg"
-                : "/icons/chevron-left-black.svg"
+                ? '/icons/chevron-left.svg'
+                : '/icons/chevron-left-black.svg'
             }
           />
         </div>
       </button>
       {renderPageNumbers()}
       <button
-        className="w-34 h-34 lg:w-48 lg:h-48 bg-background-200 p-9 lg:p-12 rounded-md lg:rounded-lg"
+        className="h-34 w-34 cursor-pointer rounded-md bg-background-200 p-9 disabled:cursor-default lg:h-48 lg:w-48 lg:rounded-lg lg:p-12"
         disabled={currentPage === totalPages}
         onClick={() => onChange(currentPage + 1)}
       >
-        <div className="relative w-full h-full">
+        <div className="relative h-full w-full">
           <Image
             fill
             alt="next page"
             sizes="(min-width: 1024px) 24px, 16px"
             src={
               currentPage === totalPages
-                ? "/icons/chevron-right.svg"
-                : "/icons/chevron-right-black.svg"
+                ? '/icons/chevron-right.svg'
+                : '/icons/chevron-right-black.svg'
             }
           />
         </div>
