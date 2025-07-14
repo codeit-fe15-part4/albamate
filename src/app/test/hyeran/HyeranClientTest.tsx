@@ -11,8 +11,10 @@ import RadioButton, {
   RadioOption,
 } from '@/shared/components/common/button/RadioButton';
 import Modal from '@/shared/components/common/modal/Modal';
+import ModalManager from '@/shared/components/common/modal/ModalManager';
 import ThemeToggle from '@/shared/components/ThemeToggle';
-import useModalStore from '@/shared/store/useModalStore';
+import useModal from '@/shared/hooks/useModal';
+
 const RADIO_OPTIONS: RadioOption[] = [
   { value: 'REJECTED', label: '거절' },
   { value: 'INTERVIEW_PENDING', label: '면접대기' },
@@ -31,7 +33,7 @@ const HyeranClientTest = () => {
 
   const [isBookmarked, setIsBookmarked] = useState(false);
 
-  const { openModal, closeModal } = useModalStore();
+  const { isOpen, content, openModal, closeModal } = useModal();
 
   const handleBookmarkToggle = () => {
     const newBookmarkState = !isBookmarked;
@@ -380,6 +382,13 @@ const HyeranClientTest = () => {
           </button>
         </div>
       </section>
+      <ModalManager
+        closeOnEsc
+        closeOnOverlayClick
+        content={content}
+        isOpen={isOpen}
+        onClose={closeModal}
+      />
     </div>
   );
 };

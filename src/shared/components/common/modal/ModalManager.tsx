@@ -1,38 +1,45 @@
 /**
- * 전역 모달 매니저
- * Portal을 사용하여 body에 직접 렌더링하고 ESC 키, body 스크롤 방지 등의 기능 제공
+ * 지역 상태 기반 모달 매니저
+ * props로 받은 모달 상태에 따라 렌더링
  */
 'use client';
 import React, { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 
-import useModalStore from '@/shared/store/useModalStore';
-import { ModalProps } from '@/shared/types/modal';
-
 import ModalContent from './ModalContent';
 import ModalOverlay from './ModalOverlay';
 import ModalProvider from './ModalProvider';
 
-const ModalManager: React.FC<ModalProps> = ({
+interface ModalManagerProps {
+  isOpen: boolean;
+  content: React.ReactNode;
+  onClose: () => void;
+  closeOnOverlayClick?: boolean;
+  closeOnEsc?: boolean;
+  className?: string;
+}
+
+const ModalManager: React.FC<ModalManagerProps> = ({
+  isOpen,
+  content,
+  onClose,
   closeOnOverlayClick = true,
   closeOnEsc = true,
   className = '',
 }) => {
-  const { isOpen, content, closeModal } = useModalStore();
-
   // ESC 키로 닫기
   useEffect(() => {
     if (!closeOnEsc || !isOpen) return;
 
     const handleEsc = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        closeModal();
+        onClose();
       }
     };
 
     document.addEventListener('keydown', handleEsc);
     return () => document.removeEventListener('keydown', handleEsc);
-  }, [isOpen, closeOnEsc, closeModal]);
+  }, [isOpen, closeOnEsc, onClose]);
 
   // body 스크롤 방지
   useEffect(() => {
@@ -50,11 +57,8 @@ const ModalManager: React.FC<ModalProps> = ({
   if (!isOpen || !content || typeof window === 'undefined') return null;
 
   return createPortal(
-    <ModalProvider onClose={closeModal}>
-      <ModalOverlay
-        closeOnOverlayClick={closeOnOverlayClick}
-        onClose={closeModal}
-      >
+    <ModalProvider onClose={onClose}>
+      <ModalOverlay closeOnOverlayClick={closeOnOverlayClick} onClose={onClose}>
         <ModalContent className={className}>{content}</ModalContent>
       </ModalOverlay>
     </ModalProvider>,
