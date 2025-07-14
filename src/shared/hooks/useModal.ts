@@ -4,7 +4,12 @@
  */
 import { useState } from 'react';
 
-const useModal = () => {
+const useModal = (): {
+  isOpen: boolean;
+  content: React.ReactNode;
+  openModal: (content: React.ReactNode) => void;
+  closeModal: () => void;
+} => {
   const [isOpen, setIsOpen] = useState(false);
   const [content, setContent] = useState<React.ReactNode>(null);
 
