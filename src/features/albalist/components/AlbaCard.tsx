@@ -4,7 +4,7 @@ import AlbaCardItem from '@common/list/AlbaCardItem';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { signOut } from 'next-auth/react';
-import { useCallback, useState, useEffect } from 'react';
+import { useCallback, useState, useEffect, useMemo } from 'react';
 
 import { useAuthSession } from '@/features/auth';
 import type { AlbaItem } from '@/shared/types/alba';
@@ -22,15 +22,9 @@ const AlbaCard = ({ item }: Props) => {
   const queryClient = useQueryClient();
 
   const [isLoading, setIsLoading] = useState(false);
-  
-  // 로컬 상태로 스크랩 정보 관리
-  const [localScrapState, setLocalScrapState] = useState({
-    isScrapped: item.isScrapped ?? false,
-    scrapCount: item.scrapCount ?? 0,
-  });
 
-  // 캐시에서 실시간으로 스크랩 상태를 가져오는 함수
-  const getCurrentScrapState = useCallback(() => {
+  // 캐시에서 현재 스크랩 상태를 가져오는 메모이제이션된 함수 (성능 최적화)
+  const currentScrapState = useMemo(() => {
     // 1. 알바 상세 캐시 확인 (가장 신뢰할 수 있는 데이터)
     const detailCache = queryClient.getQueryData([
       'albaDetail',
@@ -60,56 +54,28 @@ const AlbaCard = ({ item }: Props) => {
       }
     }
 
-    // 3. 현재 로컬 상태 반환 (캐시가 없는 경우)
-    return localScrapState;
-  }, [queryClient, item.id, localScrapState]);
-
-  // 캐시 변경을 실시간으로 감지하여 로컬 상태 업데이트
-  useEffect(() => {
-    const updateLocalState = () => {
-      const currentState = getCurrentScrapState();
-      setLocalScrapState(prev => {
-        if (prev.isScrapped !== currentState.isScrapped || 
-            prev.scrapCount !== currentState.scrapCount) {
-          return currentState;
-        }
-        return prev;
-      });
-    };
-
-    // 초기 로드 시 동기화
-    updateLocalState();
-
-    // 캐시 변경 감지
-    const unsubscribe = queryClient.getQueryCache().subscribe(event => {
-      const queryKey = event?.query?.queryKey;
-      if (
-        (queryKey?.[0] === 'albaList') ||
-        (queryKey?.[0] === 'albaDetail' && queryKey?.[1] === item.id)
-      ) {
-        setTimeout(updateLocalState, 50);
-      }
-    });
-
-    return unsubscribe;
-  }, [getCurrentScrapState, item.id, queryClient]);
-
-  // props 변경 시 초기화 (서버에서 새 데이터가 온 경우)
-  useEffect(() => {
-    const newState = {
+    // 3. props 기본값 (서버에서 받은 초기 데이터)
+    return {
       isScrapped: item.isScrapped ?? false,
       scrapCount: item.scrapCount ?? 0,
     };
-    
-    // 캐시에 데이터가 없는 경우에만 props로 업데이트
-    const cachedState = getCurrentScrapState();
-    if (cachedState.isScrapped === localScrapState.isScrapped && 
-        cachedState.scrapCount === localScrapState.scrapCount) {
-      setLocalScrapState(newState);
+  }, [queryClient, item.id, item.isScrapped, item.scrapCount]);
+
+  // 서버 데이터로 캐시 초기화 (새로고침 시 데이터 일관성 보장)
+  useEffect(() => {
+    if (item.isScrapped !== undefined || item.scrapCount !== undefined) {
+      // 서버에서 받은 데이터를 캐시에 설정 (단일 진실 소스)
+      queryClient.setQueryData(['albaDetail', item.id], (oldData: any) => ({
+        ...oldData,
+        id: item.id,
+        isScrapped: item.isScrapped ?? false,
+        scrapCount: item.scrapCount ?? 0,
+      }));
     }
-  }, [item.isScrapped, item.scrapCount, getCurrentScrapState, localScrapState]);
+  }, [item.isScrapped, item.scrapCount, item.id, queryClient]);
 
   const handleCardClick = useCallback(async () => {
+    // 상세 페이지 이동 전 프리페치
     queryClient.prefetchQuery({
       queryKey: ['albaDetail', item.id],
       queryFn: () => getAlbaDetail(item.id).then(res => res.data),
@@ -117,6 +83,7 @@ const AlbaCard = ({ item }: Props) => {
     router.push(`/alba/${item.id}`);
   }, [item.id, queryClient, getAlbaDetail, router]);
 
+  // 캐시 업데이트 함수 (안전하고 단순하게)
   const updateAllCaches = useCallback(
     (newScrapState: boolean, countDelta: number) => {
       // 1. 리스트 캐시 업데이트
@@ -133,7 +100,7 @@ const AlbaCard = ({ item }: Props) => {
                   ? {
                       ...alba,
                       isScrapped: newScrapState,
-                      scrapCount: Math.max(0, alba.scrapCount + countDelta),
+                      scrapCount: Math.max(0, (alba.scrapCount ?? 0) + countDelta),
                     }
                   : alba
               ) || [],
@@ -147,17 +114,27 @@ const AlbaCard = ({ item }: Props) => {
           ? {
               ...oldData,
               isScrapped: newScrapState,
-              scrapCount: Math.max(0, oldData.scrapCount + countDelta),
+              scrapCount: Math.max(0, (oldData.scrapCount ?? 0) + countDelta),
             }
-          : oldData
+          : {
+              id: item.id,
+              isScrapped: newScrapState,
+              scrapCount: Math.max(0, countDelta),
+            }
       );
-
-      // 3. 기타 무효화
-      queryClient.invalidateQueries({ queryKey: ['myScrapList'] });
-      queryClient.invalidateQueries({ queryKey: ['myAlbaList'] });
     },
     [item.id, queryClient]
   );
+
+  // 서버와 동기화 함수
+  const syncWithServer = useCallback(async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['albaList'] }),
+      queryClient.invalidateQueries({ queryKey: ['albaDetail', item.id] }),
+      queryClient.invalidateQueries({ queryKey: ['myScrapList'] }),
+      queryClient.invalidateQueries({ queryKey: ['myAlbaList'] }),
+    ]);
+  }, [item.id, queryClient]);
 
   const handleScrapToggle = useCallback(async () => {
     if (isLoading) return;
@@ -169,38 +146,34 @@ const AlbaCard = ({ item }: Props) => {
 
     setIsLoading(true);
 
-    const newScrapState = !localScrapState.isScrapped;
+    const wasScraped = currentScrapState.isScrapped;
+    const newScrapState = !wasScraped;
     const countDelta = newScrapState ? 1 : -1;
 
-    // 즉시 로컬 상태 업데이트 (옵티미스틱)
-    setLocalScrapState(prev => ({
-      isScrapped: newScrapState,
-      scrapCount: Math.max(0, prev.scrapCount + countDelta),
-    }));
-
-    // 캐시 업데이트
+    // 옵티미스틱 업데이트
     updateAllCaches(newScrapState, countDelta);
 
     try {
+      // 세션 갱신
       await refreshSession();
 
-      if (localScrapState.isScrapped) {
+      if (wasScraped) {
+        // 스크랩 취소
         await cancelScrapAlba(item.id);
         alert(`${item.title} 스크랩 취소 완료!`);
       } else {
+        // 스크랩 추가
         try {
           await scrapAlba(item.id);
           alert(`${item.title} 스크랩 완료!`);
         } catch (error: any) {
+          // 이미 스크랩된 경우 처리
           if (
-            error?.response?.data?.message === '이미 스크랩한 알바폼입니다.'
+            error?.response?.data?.message === '이미 스크랩한 알바폼입니다.' ||
+            error?.response?.data?.message?.includes('이미 스크랩')
           ) {
             await cancelScrapAlba(item.id);
-            // 이미 스크랩된 상태였으므로 취소로 처리
-            setLocalScrapState(prev => ({
-              isScrapped: false,
-              scrapCount: Math.max(0, prev.scrapCount - 2), // 옵티미스틱 + 실제 취소
-            }));
+            // 옵티미스틱 업데이트를 취소로 수정 (원래 +1했으므로 -2로 보정)
             updateAllCaches(false, -2);
             alert(`${item.title} 스크랩 취소 완료!`);
           } else {
@@ -210,23 +183,17 @@ const AlbaCard = ({ item }: Props) => {
       }
 
       // 성공 후 서버와 동기화
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['albaList'] }),
-        queryClient.invalidateQueries({ queryKey: ['albaDetail', item.id] }),
-      ]);
+      await syncWithServer();
     } catch (error: any) {
       // 실패 시 롤백
-      setLocalScrapState(prev => ({
-        isScrapped: !newScrapState,
-        scrapCount: Math.max(0, prev.scrapCount - countDelta),
-      }));
-      updateAllCaches(!newScrapState, -countDelta);
+      updateAllCaches(wasScraped, -countDelta);
 
-      if (error?.response?.status === 401) {
+      if (error?.response?.status === 401 || error?.message?.includes('세션')) {
+        console.warn('세션 만료. 로그아웃 진행.');
         signOut({ callbackUrl: '/signin', redirect: true });
       } else {
         alert('요청 중 오류가 발생했습니다.');
-        console.error(error);
+        console.error('스크랩 처리 오류:', error);
       }
     } finally {
       setIsLoading(false);
@@ -234,7 +201,7 @@ const AlbaCard = ({ item }: Props) => {
   }, [
     isLoading,
     isAuthenticated,
-    localScrapState.isScrapped,
+    currentScrapState.isScrapped,
     item.id,
     item.title,
     router,
@@ -242,7 +209,7 @@ const AlbaCard = ({ item }: Props) => {
     scrapAlba,
     cancelScrapAlba,
     updateAllCaches,
-    queryClient,
+    syncWithServer,
   ]);
 
   const dropdownOptions = [
@@ -251,7 +218,7 @@ const AlbaCard = ({ item }: Props) => {
       onClick: () => router.push(`/apply/${item.id}`),
     },
     {
-      label: localScrapState.isScrapped ? '스크랩 취소' : '스크랩',
+      label: currentScrapState.isScrapped ? '스크랩 취소' : '스크랩',
       onClick: handleScrapToggle,
       disabled: isLoading,
     },
@@ -260,8 +227,8 @@ const AlbaCard = ({ item }: Props) => {
   return (
     <AlbaCardItem
       dropdownOptions={dropdownOptions}
-      isScrapped={localScrapState.isScrapped}
-      item={{ ...item, scrapCount: localScrapState.scrapCount }}
+      isScrapped={currentScrapState.isScrapped}
+      item={{ ...item, scrapCount: currentScrapState.scrapCount }}
       onClick={handleCardClick}
     />
   );

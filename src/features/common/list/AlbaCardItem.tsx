@@ -44,15 +44,15 @@ const AlbaCardItem = ({
   const [imgSrc, setImgSrc] = useState(imageUrls?.[0] || '/icons/user.svg');
   const [open, setOpen] = useState(false);
   
-  // 로컬 상태로 스크랩 정보 관리 (캐시와 동기화)
+  // 로컬 상태로 스크랩 정보 관리 (서버 데이터 기반 초기화)
   const [localScrapState, setLocalScrapState] = useState({
     isScrapped: isScrapped ?? ('isScrapped' in item ? item.isScrapped : false),
     scrapCount: item.scrapCount ?? 0,
   });
 
-  // 캐시에서 실시간으로 스크랩 상태와 카운트를 가져오는 함수
+  // 캐시에서 실시간으로 스크랩 상태와 카운트를 가져오는 함수 (우선순위 기반)
   const getCurrentScrapState = () => {
-    // 1. 캐시된 상세 데이터 우선 확인
+    // 1. 캐시된 상세 데이터 우선 확인 (가장 신뢰할 수 있는 데이터)
     const albaDetailCache = queryClient.getQueryData(['albaDetail', item.id]) as any;
     if (albaDetailCache && typeof albaDetailCache.isScrapped === 'boolean') {
       return {
@@ -78,9 +78,29 @@ const AlbaCardItem = ({
       }
     }
 
-    // 3. 기본값 반환
+    // 3. 현재 로컬 상태 반환 (캐시가 없는 경우)
     return localScrapState;
   };
+
+  // 서버 데이터로 초기화 (새로고침 시 데이터 일관성 보장)
+  useEffect(() => {
+    if (item.isScrapped !== undefined || item.scrapCount !== undefined) {
+      const serverState = {
+        isScrapped: isScrapped ?? ('isScrapped' in item ? item.isScrapped : false),
+        scrapCount: item.scrapCount ?? 0,
+      };
+      
+      // 캐시에 서버 데이터 설정 (단일 진실 소스)
+      queryClient.setQueryData(['albaDetail', item.id], (oldData: any) => ({
+        ...oldData,
+        id: item.id,
+        isScrapped: serverState.isScrapped,
+        scrapCount: serverState.scrapCount,
+      }));
+      
+      setLocalScrapState(serverState);
+    }
+  }, [item.isScrapped, item.scrapCount, item.id, isScrapped, queryClient]);
 
   // 캐시 변경을 실시간으로 감지하여 로컬 상태 업데이트
   useEffect(() => {
@@ -99,7 +119,7 @@ const AlbaCardItem = ({
     // 초기 로드 시 캐시 상태로 동기화
     updateLocalState();
 
-    // 캐시 변경 감지
+    // 캐시 변경 감지 (디바운싱 적용)
     const unsubscribe = queryClient.getQueryCache().subscribe(event => {
       const queryKey = event?.query?.queryKey;
       if (
@@ -107,27 +127,12 @@ const AlbaCardItem = ({
         (queryKey?.[0] === 'albaDetail' && queryKey?.[1] === item.id)
       ) {
         // 약간의 지연을 두어 캐시 업데이트가 완료된 후 상태 동기화
-        setTimeout(updateLocalState, 50);
+        setTimeout(updateLocalState, 100);
       }
     });
 
     return unsubscribe;
   }, [item.id, queryClient]);
-
-  // props가 변경될 때도 상태 업데이트
-  useEffect(() => {
-    const newState = {
-      isScrapped: isScrapped ?? ('isScrapped' in item ? item.isScrapped : false),
-      scrapCount: item.scrapCount ?? 0,
-    };
-    
-    // 캐시 데이터가 없는 경우에만 props로 업데이트
-    const cachedState = getCurrentScrapState();
-    if (cachedState.isScrapped === localScrapState.isScrapped && 
-        cachedState.scrapCount === localScrapState.scrapCount) {
-      setLocalScrapState(newState);
-    }
-  }, [isScrapped, item.scrapCount, item.isScrapped]);
 
   useClickOutside(dropdownRef, () => setOpen(false));
 
