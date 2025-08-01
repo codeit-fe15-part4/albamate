@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import React from 'react';
 import { useForm } from 'react-hook-form';
 
+import useApplicationStore from '@/shared/store/useApplicationStore';
 import useModalStore from '@/shared/store/useModalStore';
 
 import albaApi from '../../api/albaApi';
@@ -24,6 +25,7 @@ interface ApplicationModalProps {
 const ApplicationModal = ({ id }: ApplicationModalProps) => {
   const { closeModal } = useModalStore();
   const router = useRouter();
+  const { setGuestApplication } = useApplicationStore();
 
   const {
     register,
@@ -33,6 +35,7 @@ const ApplicationModal = ({ id }: ApplicationModalProps) => {
 
   const onSubmit = async (data: FormValues) => {
     try {
+      console.log('🚀 API 호출 시작');
       const response = await albaApi().verifyMyApplication(id, {
         name: data.name,
         phoneNumber: data.phone,
@@ -40,8 +43,39 @@ const ApplicationModal = ({ id }: ApplicationModalProps) => {
       });
 
       const application = response.data;
+      console.log('✅ API 응답 성공:', application);
+
+      // 1. Zustand 스토어에 저장
+      setGuestApplication(application);
+      console.log('💾 스토어에 데이터 저장 완료');
+
+      // 2. sessionStorage에도 백업 저장
+      sessionStorage.setItem(
+        'guestApplication',
+        JSON.stringify({
+          data: application,
+          timestamp: Date.now(),
+        })
+      );
+      console.log('💾 sessionStorage 백업 저장 완료');
+
+      // 3. 저장 후 스토어 상태 확인
+      const currentStore = useApplicationStore.getState();
+      console.log('🔍 저장 후 스토어 상태:', {
+        isGuestMode: currentStore.isGuestMode,
+        hasGuestApplication: !!currentStore.guestApplication,
+        guestApplicationId: currentStore.guestApplication?.id,
+      });
+
       closeModal();
-      router.push(`/myapply/${id}`);
+
+      // 4. 페이지 이동 전 잠시 대기 (상태 안정화)
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // 간단한 URL로 이동
+      const targetUrl = `/myapply/${id}`;
+      console.log('🔄 페이지 이동:', targetUrl);
+      router.push(targetUrl);
     } catch (error) {
       console.error('인증 실패:', error);
       alert('지원자 정보를 확인할 수 없습니다.');
